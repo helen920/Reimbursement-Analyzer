@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reimbursement Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #f1f1f1;
+    --ink-2: #aaaaaa;
+    --ink-3: #717171;
+    --paper: #0f0f0f;
+    --paper-2: #1e1e1e;
+    --paper-3: #272727;
+    --accent: #ff0000;
+    --accent-2: #cc0000;
+    --accent-light: rgba(255,0,0,0.12);
+    --warn: #ff6b6b;
+    --warn-light: rgba(255,107,107,0.15);
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.15);
+    --radius: 6px;
+    --radius-lg: 12px;
+  }
+
+  body {
+    font-family: 'Roboto', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border-strong);
+    padding: 16px 40px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #212121;
+  }
+
+  header h1 {
+    font-family: 'Roboto', sans-serif;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+
+  header h1 span {
+    color: var(--accent);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    min-height: calc(100vh - 73px);
+  }
+
+  .left-panel {
+    border-right: 1px solid var(--border-strong);
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    background: #212121;
+  }
+
+  .right-panel {
+    padding: 32px 36px;
+    overflow-x: auto;
+    background: var(--paper);
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #f1f1f1;
+    margin-bottom: 12px;
+  }
+
+  /* Upload area */
+  .upload-zone {
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--paper-2);
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 12px;
+    color: var(--ink-3);
+  }
+
+  .upload-zone p { color: var(--ink-2); font-size: 12px; }
+  .upload-zone small { color: var(--ink-3); font-size: 11px; display: block; margin-top: 4px; }
+
+  .file-loaded {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--accent-light);
+    border-radius: var(--radius);
+    border: 1px solid rgba(255,0,0,0.3);
+    color: #ff6b6b;
+    font-size: 12px;
+  }
+
+  .file-loaded.show { display: flex; }
+
+  .btn-analyze {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Roboto', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    display: none;
+  }
+
+  .btn-analyze.show { display: block; }
+  .btn-analyze:hover { background: var(--accent-2); }
+  .btn-analyze:active { transform: scale(0.99); }
+  .btn-analyze:disabled { background: var(--paper-3); color: var(--ink-3); cursor: not-allowed; }
+
+  /* Mapping table */
+  .mapping-scroll {
+    max-height: 420px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--paper-2);
+  }
+
+  .mapping-scroll::-webkit-scrollbar { width: 4px; }
+  .mapping-scroll::-webkit-scrollbar-track { background: transparent; }
+  .mapping-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  .mapping-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .mapping-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--paper-3);
+    padding: 9px 12px;
+    text-align: left;
+    color: var(--ink-3);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    z-index: 1;
+  }
+  .mapping-table tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink-2);
+    vertical-align: top;
+  }
+  .mapping-table tbody tr:last-child td { border-bottom: none; }
+  .mapping-table tbody tr:hover td { background: var(--paper-3); }
+  .mapping-table td:first-child { color: var(--ink); font-weight: 500; white-space: nowrap; }
+  .acct-tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    line-height: 1.5;
+    background: var(--paper-3);
+    color: var(--ink-2);
+  }
+  .acct-admin { background: var(--paper-3); color: var(--ink-2); }
+  .acct-field { background: var(--paper-3); color: var(--ink-2); }
+  .acct-same { background: var(--paper-3); color: var(--ink-2); }
+
+  /* Results area */
+  .results-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: var(--ink-3);
+    gap: 12px;
+    text-align: center;
+  }
+
+  .results-empty svg { opacity: 0.3; }
+
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .card {
+    background: var(--paper-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 12px 16px;
+  }
+
+  .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); margin-bottom: 4px; }
+  .card-value { font-family: 'Roboto', sans-serif; font-size: 24px; font-weight: 300; color: var(--ink); }
+  .card-sub { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 0 10px;
+  }
+  .section-divider span {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .results-table-wrap {
+    background: var(--paper-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .results-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.4; table-layout: fixed; }
+  .results-table colgroup col:nth-child(1) { width: 14%; }
+  .results-table colgroup col:nth-child(2) { width: 28%; }
+  .results-table colgroup col:nth-child(3) { width: 10%; }
+  .results-table colgroup col:nth-child(4) { width: 28%; }
+  .results-table colgroup col:nth-child(5) { width: 10%; }
+  .results-table thead th {
+    background: var(--paper-3);
+    padding: 6px 10px;
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--border-strong);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .results-table thead th:nth-child(3),
+  .results-table thead th:nth-child(5) { text-align: right; }
+
+  .results-table td:nth-child(3),
+  .results-table td:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .results-table tfoot td {
+    padding: 6px 10px;
+    font-weight: 500;
+    background: var(--paper-3);
+    border-top: 1px solid var(--border-strong);
+    font-size: 12px;
+  }
+
+  .results-table tbody td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .results-table tbody tr:last-child td { border-bottom: none; }
+  .results-table tbody tr:hover td { background: var(--paper-3); }
+
+  .results-table td:nth-child(3),
+  .results-table td:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .acct-cell { font-size: 11px; color: var(--ink-2); }
+  .dash { color: var(--ink-3); }
+
+  .review-badge {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: var(--warn-light);
+    color: var(--warn);
+    display: inline-block;
+  }
+  .results-table tfoot td:nth-child(3),
+  .results-table tfoot td:nth-child(5) { text-align: right; }
+
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .results-title {
+    font-family: 'Roboto', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .btn-download {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--ink);
+    border: 1.5px solid var(--border-strong);
+    border-radius: var(--radius);
+    font-family: 'Roboto', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .btn-download.show { display: flex; }
+  .btn-download:hover { background: var(--paper-3); border-color: var(--ink-2); }
+
+  .badge-count {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: var(--warn-light);
+    color: var(--warn);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Reimbursement <span>Analyzer</span></h1>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+
+    <div>
+      <p class="section-label">Upload data file</p>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 16V8m0 0-3 3m3-3 3 3M6 20h12a2 2 0 002-2V8l-5-5H6a2 2 0 00-2 2v13a2 2 0 002 2z"/>
+        </svg>
+        <p>Drop your .xlsx file here</p>
+        <small>or click to browse</small>
+      </div>
+
+      <div class="file-loaded" id="fileLoaded">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span id="fileName">file.xlsx</span>
+      </div>
+
+      <div style="margin-top: 12px;">
+        <button class="btn-analyze" id="analyzeBtn" onclick="runAnalysis()">Run analysis</button>
+      </div>
+    </div>
+
+    <div>
+      <p class="section-label">Account mapping rules</p>
+      <div class="mapping-scroll">
+        <table class="mapping-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Admin account</th>
+              <th>Field account</th>
+            </tr>
+          </thead>
+          <tbody id="mappingBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="results-empty" id="resultsEmpty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+      </svg>
+      <p>Upload a data file and run analysis<br>to see the summary here</p>
+    </div>
+
+    <div id="resultsArea" style="display:none">
+      <div class="results-header">
+        <span class="results-title">Summary</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="badge-count" id="reviewCount" style="display:none"></span>
+          <button class="btn-download" id="downloadBtn" onclick="downloadExcel()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 12-4-4m4 4 4-4M4 20h16"/></svg>
+            Download Excel
+          </button>
+        </div>
+      </div>
+
+      <div class="summary-cards">
+        <div class="card">
+          <div class="card-label">Admin total</div>
+          <div class="card-value" id="adminTotal">—</div>
+          <div class="card-sub" id="adminCats"></div>
+        </div>
+        <div class="card">
+          <div class="card-label">Field total</div>
+          <div class="card-value" id="fieldTotal">—</div>
+          <div class="card-sub" id="fieldCats"></div>
+        </div>
+        <div class="card">
+          <div class="card-label">Grand total</div>
+          <div class="card-value" id="grandTotal">—</div>
+          <div class="card-sub">all reimbursements</div>
+        </div>
+      </div>
+
+      <div class="section-divider">
+        <span>Reimbursements by week</span>
+      </div>
+
+      <div class="results-table-wrap" style="margin-bottom:16px;">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Week ending</th>
+              <th style="text-align:right">Admin employees</th>
+              <th style="text-align:right">Field employees</th>
+            </tr>
+          </thead>
+          <tbody id="dateBody"></tbody>
+        </table>
+      </div>
+
+      <div class="section-divider">
+        <span>Breakdown by category</span>
+      </div>
+
+      <div class="results-table-wrap">
+        <table class="results-table">
+          <colgroup>
+            <col><col><col><col><col>
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Admin account</th>
+              <th>Admin amount</th>
+              <th>Field account</th>
+              <th>Field amount</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td></td>
+              <td id="footAdmin">—</td>
+              <td></td>
+              <td id="footField">—</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const MAPPING = {
+  "mileage pay":                    ["Reimbursement (Admin):Mileage Reimbursement",             "Reimbursement (Field):Mileage Reimbursement"],
+  "cell reimbursement":             ["Benefit Liabilities For Cell Phone Benefit",              "Benefit Liabilities For Cell Phone Benefit"],
+  "tolls":                          ["Reimbursement (Admin):Parking & tolls",                   "Reimbursement (Field):Parking & tolls"],
+  "software":                       ["Software & apps",                                         "Reimbursement (Field):Software"],
+  "hotel":                          ["Reimbursement (Admin):Hotel",                             "Reimbursement (Field):Hotel"],
+  "airfare":                        ["Reimbursement (Admin):Airfare",                           "Reimbursement (Field):Airfare"],
+  "field supplies":                 ["Reimbursement (Field):Field Supplies",                    "Reimbursement (Field):Field Supplies"],
+  "lab supplies":                   ["Reimbursement (Admin):Lab supplies",                      "Reimbursement (Field):Lab supplies"],
+  "office supplies":                ["Reimbursement (Admin):Office supplies",                   "Reimbursement (Admin):Office supplies"],
+  "lab lease":                      ["Reimbursement (Admin):Lab Lease",                         "Reimbursement (Field):Lab Lease"],
+  "shipping":                       ["Reimbursement (Admin):Shipping",                          "Reimbursement (Field):Shipping"],
+  "internet":                       ["Reimbursement (Admin):Internet",                          "Reimbursement (Field):Internet"],
+  "project related fee":            ["Reimbursement (Admin):Project Related Fee",               "Reimbursement (Field):Project Related Fee"],
+  "gas":                            ["Reimbursement (Admin):Gas",                               "Reimbursement (Field):Gas"],
+  "project related travel":         ["Reimbursement (Admin):Project Related Travel",            "Reimbursement (Field):Project Related Travel"],
+  "meals":                          ["Reimbursement (Admin):Travel Meals",                      "Reimbursement (Field):Travel Meals"],
+  "car repair":                     ["Reimbursement (Admin):Car Repair",                        "Reimbursement (Field):Car Repair"],
+  "car wash":                       ["Reimbursement (Admin):Car Wash",                          "Reimbursement (Field):Car Wash"],
+  "car rental":                     ["Reimbursement (Admin):Rentals",                           "Reimbursement (Field):Rentals"],
+  "publications/books":             ["Reimbursement (Admin):Subscriptions/Publications/Books",  "Reimbursement (Field):Subscriptions/Publications/Books"],
+  "employee background check":      ["Reimbursement (Admin):Employee Background Check",         "Reimbursement (Field):Employee Background Check"],
+  "mediation fees":                 ["Reimbursement (Admin):Mediation Fees",                    "Reimbursement (Field):Mediation Fees"],
+  "business license":               ["Reimbursement (Admin):Business License",                  "Reimbursement (Field):Business License"],
+  "membership":                     ["Reimbursement (Admin):Membership",                        "Reimbursement (Field):Membership"],
+  "subscriptions":                  ["Reimbursement (Admin):Subscriptions/Publications/Books",  "Reimbursement (Field):Subscriptions/Publications/Books"],
+  "lab certification":              ["Reimbursement (Admin):Lab Certification",                 "Reimbursement (Field):Lab Certification"],
+  "office maintenance":             ["Reimbursement (Admin):Office supplies",                   "Reimbursement (Admin):Office supplies"],
+  "ofice maintenance":              ["Reimbursement (Admin):Office supplies",                   "Reimbursement (Admin):Office supplies"],
+  "lab cleaning":                   ["Reimbursement (Admin):Lab Cleaning",                      "Reimbursement (Field):Lab Cleaning"],
+  "conference":                     ["Reimbursement (Admin):Conference",                        "Reimbursement (Field):Conference"],
+  "print":                          ["Reimbursement (Admin):Print",                             "Reimbursement (Field):Print"],
+  "parking":                        ["Reimbursement (Admin):Parking & tolls",                   "Reimbursement (Field):Parking & tolls"],
+  "rent":                           ["Reimbursement (Admin):Rent",                              "Reimbursement (Field):Rent"],
+  "accounting":                     ["Reimbursement (Admin):Accounting",                        "Reimbursement (Field):Accounting"],
+  "holiday gifts":                  ["Reimbursement (Admin):Gifts & Team Events",               "Reimbursement (Field):Gifts & Team Events"],
+  "gift":                           ["Reimbursement (Admin):Gifts & Team Events",               "Reimbursement (Admin):Gifts & Team Events"],
+  "lab accreditation":              ["Reimbursement (Admin):Lab Accreditation",                 "Reimbursement (Field):Lab Accreditation"],
+  "rentals":                        ["Reimbursement (Admin):Rentals",                           "Reimbursement (Field):Rentals"],
+  "tuition reimbursement":          ["Reimbursement (Admin):Tuition Reimbursement",             "Reimbursement (Field):Tuition Reimbursement"],
+  "personal vehicle usage":         ["Reimbursement (Admin):Personal Vehicle Usage",            "Reimbursement (Field):Personal Vehicle Usage"],
+  "fees":                           ["Reimbursement (Admin):Project Related Fee",               "Reimbursement (Field):Project Related Fee"],
+  "training":                       ["Reimbursement (Admin):Tuition Reimbursement",             "Reimbursement (Field):Tuition Reimbursement"],
+  "hardware":                       ["Small tools & equipment",                                 "Small tools & equipment"],
+  "company cellphone":              ["Small tools & equipment",                                 "Small tools & equipment"],
+  "sierra geotech training academy":["Reimbursement (Admin):Tuition Reimbursement",             "Reimbursement (Field):Tuition Reimbursement"],
+  "office party/events":            ["Reimbursement (Admin):Gifts & Team Events",               "Reimbursement (Field):Gifts & Team Events"],
+  "dues/membership":                ["Reimbursement (Admin):Membership",                        "Reimbursement (Field):Membership"],
+  "wage reconciliation":            ["Uncategorized Expense",                                   "Uncategorized Expense"],
+  "lab maintenance":                ["Reimbursement (Admin):Lab supplies",                      "Reimbursement (Field):Lab supplies"],
+  "landfill":                       ["Reimbursement (Admin):Lab Cleaning",                      "Reimbursement (Field):Lab Cleaning"],
+  "staff appreciation":             ["Reimbursement (Admin):Gifts & Team Events",               "Reimbursement (Field):Gifts & Team Events"],
+};
+
+function renderMapping() {
+  const tbody = document.getElementById('mappingBody');
+  Object.entries(MAPPING).forEach(([cat, [admin, field]]) => {
+    const same = admin === field;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${cat.charAt(0).toUpperCase() + cat.slice(1)}</td>
+      <td><span class="acct-tag ${same ? 'acct-same' : 'acct-admin'}">${admin}</span></td>
+      <td><span class="acct-tag ${same ? 'acct-same' : 'acct-field'}">${field}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+let parsedData = null;
+
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileLoaded').classList.add('show');
+  document.getElementById('analyzeBtn').classList.add('show');
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    parsedData = XLSX.utils.sheet_to_json(ws, { defval: 0 });
+    console.log('Parsed rows:', parsedData.length);
+    if (parsedData.length > 0) console.log('Keys:', Object.keys(parsedData[0]));
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function fmt(v) {
+  if (!v || v === 0) return '<span class="dash">—</span>';
+  return '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function fmtPlain(v) {
+  return '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function runAnalysis() {
+  if (!parsedData || parsedData.length === 0) return;
+
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Processing…';
+
+  setTimeout(() => {
+
+  const allKeys = Object.keys(parsedData[0]);
+
+  // Find the employee type column (named 'Column' in the file)
+  const typeKey = allKeys.find(k => {
+    const vals = parsedData.map(r => (r[k] || '').toString().trim().toUpperCase());
+    return vals.includes('ADMIN') || vals.includes('FIELD');
+  });
+
+  if (!typeKey) {
+    alert('Could not find ADMIN/FIELD column in this file. Please check the format.');
+    return;
+  }
+
+  // Find start of reimbursement columns (starting from 'Mileage Pay')
+  const startKey = allKeys.find(k => k.toString().trim().toLowerCase() === 'mileage pay');
+  const startIdx = startKey ? allKeys.indexOf(startKey) : 7;
+  const reimbCols = allKeys.slice(startIdx).filter(k => k.toString().trim().toLowerCase() !== 'total');
+
+  const adminRows = parsedData.filter(r => (r[typeKey] || '').toString().trim().toUpperCase() === 'ADMIN');
+  const fieldRows = parsedData.filter(r => (r[typeKey] || '').toString().trim().toUpperCase() === 'FIELD');
+
+  const sumBy = (rows, cols) => {
+    const sums = {};
+    cols.forEach(c => {
+      const total = rows.reduce((acc, r) => acc + (parseFloat(r[c]) || 0), 0);
+      if (total > 0) sums[c] = total;
+    });
+    return sums;
+  };
+
+  const adminSums = sumBy(adminRows, reimbCols);
+  const fieldSums = sumBy(fieldRows, reimbCols);
+
+  const allCats = new Set([...Object.keys(adminSums), ...Object.keys(fieldSums)]);
+  const rows = [];
+  allCats.forEach(cat => {
+    const a = adminSums[cat] || 0;
+    const f = fieldSums[cat] || 0;
+    if (a > 0 || f > 0) rows.push({ cat, a, f });
+  });
+  rows.sort((x, y) => (y.a + y.f) - (x.a + x.f));
+
+  const adminTotal = rows.reduce((s, r) => s + r.a, 0);
+  const fieldTotal = rows.reduce((s, r) => s + r.f, 0);
+  const grandTotal = adminTotal + fieldTotal;
+
+  document.getElementById('adminTotal').textContent = fmtPlain(adminTotal);
+  document.getElementById('fieldTotal').textContent = fmtPlain(fieldTotal);
+  document.getElementById('grandTotal').textContent = fmtPlain(grandTotal);
+  document.getElementById('adminCats').textContent = Object.keys(adminSums).length + ' categories';
+  document.getElementById('fieldCats').textContent = Object.keys(fieldSums).length + ' categories';
+  document.getElementById('footAdmin').textContent = fmtPlain(adminTotal);
+  document.getElementById('footField').textContent = fmtPlain(fieldTotal);
+
+  // Date breakdown by amount
+  const dateKey = allKeys.find(k => k.toString().toLowerCase().includes('week') || k.toString().toLowerCase().includes('date'));
+  const dateMap = {};
+  if (dateKey) {
+    parsedData.forEach(r => {
+      const raw = r[dateKey];
+      if (!raw) return;
+      let dateStr;
+      if (typeof raw === 'number') {
+        const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+        dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      } else {
+        const d = new Date(raw);
+        dateStr = isNaN(d) ? String(raw) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      if (!dateMap[dateStr]) dateMap[dateStr] = { admin: 0, field: 0 };
+      const type = (r[typeKey] || '').toString().trim().toUpperCase();
+      const rowTotal = reimbCols.reduce((sum, col) => sum + (parseFloat(r[col]) || 0), 0);
+      if (type === 'ADMIN') dateMap[dateStr].admin += rowTotal;
+      else if (type === 'FIELD') dateMap[dateStr].field += rowTotal;
+    });
+  }
+
+  const dateBody = document.getElementById('dateBody');
+  dateBody.innerHTML = '';
+  let weekAdminTotal = 0, weekFieldTotal = 0;
+  Object.entries(dateMap).forEach(([date, amounts]) => {
+    weekAdminTotal += amounts.admin;
+    weekFieldTotal += amounts.field;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${date}</td>
+      <td style="text-align:right">${amounts.admin > 0 ? fmtPlain(amounts.admin) : '<span class="dash">—</span>'}</td>
+      <td style="text-align:right">${amounts.field > 0 ? fmtPlain(amounts.field) : '<span class="dash">—</span>'}</td>
+    `;
+    dateBody.appendChild(tr);
+  });
+
+  const totalTr = document.createElement('tr');
+  totalTr.style.cssText = 'font-weight:500; background:var(--paper-3);';
+  totalTr.innerHTML = `
+    <td style="border-top:1px solid var(--border-strong)">Total</td>
+    <td style="text-align:right; border-top:1px solid var(--border-strong)">${weekAdminTotal > 0 ? fmtPlain(weekAdminTotal) : '<span class="dash">—</span>'}</td>
+    <td style="text-align:right; border-top:1px solid var(--border-strong)">${weekFieldTotal > 0 ? fmtPlain(weekFieldTotal) : '<span class="dash">—</span>'}</td>
+  `;
+  dateBody.appendChild(totalTr);
+
+  let reviewCount = 0;
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '';
+
+  rows.forEach(({ cat, a, f }) => {
+    const key = cat.toLowerCase().trim();
+    const mapping = MAPPING[key];
+    const adminAcc = mapping ? mapping[0] : null;
+    const fieldAcc = mapping ? mapping[1] : null;
+
+    if (!mapping && (a > 0 || f > 0)) reviewCount++;
+
+    const adminCell = a === 0 ? '<span class="dash">—</span>' :
+      (adminAcc ? `<span class="acct-tag acct-admin">${adminAcc}</span>` : '<span class="review-badge">No mapping — needs review</span>');
+
+    const fieldCell = f === 0 ? '<span class="dash">—</span>' :
+      (fieldAcc ? `<span class="acct-tag acct-field">${fieldAcc}</span>` : '<span class="review-badge">No mapping — needs review</span>');
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${cat}</td>
+      <td>${adminCell}</td>
+      <td>${fmt(a)}</td>
+      <td>${fieldCell}</td>
+      <td>${fmt(f)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const rc = document.getElementById('reviewCount');
+  if (reviewCount > 0) {
+    rc.textContent = reviewCount + ' need review';
+    rc.style.display = 'inline';
+  } else {
+    rc.style.display = 'none';
+  }
+
+  document.getElementById('resultsEmpty').style.display = 'none';
+  document.getElementById('resultsArea').style.display = 'block';
+  document.getElementById('downloadBtn').classList.add('show');
+
+  window._lastResults = { rows, adminTotal, fieldTotal };
+
+  btn.disabled = false;
+  btn.textContent = 'Run analysis';
+
+  }, 50);
+}
+
+function downloadExcel() {
+  const { rows, adminTotal, fieldTotal } = window._lastResults;
+  const data = [["Category", "Admin Account", "Admin Amount", "Field Account", "Field Amount"]];
+
+  rows.forEach(({ cat, a, f }) => {
+    const key = cat.toLowerCase().trim();
+    const mapping = MAPPING[key];
+    const adminAcc = mapping ? mapping[0] : 'No mapping — needs review';
+    const fieldAcc = mapping ? mapping[1] : 'No mapping — needs review';
+    data.push([cat, a > 0 ? adminAcc : '', a || '', f > 0 ? fieldAcc : '', f || '']);
+  });
+
+  data.push(['Total', '', adminTotal, '', fieldTotal]);
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:28},{wch:48},{wch:16},{wch:48},{wch:16}];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Reimbursement Summary');
+  XLSX.writeFile(wb, 'reimbursement_summary.xlsx');
+}
+
+renderMapping();
+</script>
+</body>
+</html>
